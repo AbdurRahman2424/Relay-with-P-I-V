@@ -1,0 +1,486 @@
+!DOCTYPE html
+html lang=en
+head
+    meta charset=UTF-8
+    title16-Channel Power & Control Dashboardtitle
+    meta name=viewport content=width=device-width, initial-scale=1.0
+    !-- Tailwind CSS for styling --
+    script src=httpscdn.tailwindcss.comscript
+    script
+        tailwind.config = {
+            theme {
+                extend {
+                    colors {
+                        'primary-blue' '#3b82f6',
+                        'primary-green' '#10b981',
+                        'primary-red' '#ef4444',
+                    },
+                    fontFamily {
+                        sans ['Inter', 'sans-serif'],
+                    },
+                },
+            },
+        };
+    script
+    !-- Chart.js for graphing --
+    script src=httpscdn.jsdelivr.netnpmchart.js@3.7.1distchart.min.jsscript
+    !-- Firebase SDKs --
+    script src=httpswww.gstatic.comfirebasejs9.6.10firebase-app-compat.jsscript
+    script src=httpswww.gstatic.comfirebasejs9.6.10firebase-database-compat.jsscript
+    script src=httpswww.gstatic.comfirebasejs9.6.10firebase-auth-compat.jsscript
+
+    style
+         Custom Styles for aesthetics and responsiveness 
+        body { min-height 100vh; background-color #f3f4f6; }
+        .tab-button {
+            transition all 0.2s;
+            border-bottom 3px solid transparent;
+        }
+        .tab-button.active {
+            border-color #3b82f6;  primary-blue 
+            color #3b82f6;
+            font-weight 600;
+        }
+        .content-area { min-height 70vh; }
+        .relay-card, .reading-card {
+            box-shadow 0 4px 6px rgba(0, 0, 0, 0.05);
+            transition transform 0.2s;
+        }
+        .relay-cardhover { transform translateY(-2px); }
+        .status-on { background-color #10b981; }  primary-green 
+        .status-off { background-color #ef4444; }  primary-red 
+        .total-power {
+            background linear-gradient(90deg, #1d4ed8, #2563eb);
+            color white;
+            box-shadow 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+        .chart-container { 
+            max-width 100%; 
+            height 400px;
+            margin 20px auto;
+            background white;
+            padding 15px;
+            border-radius 12px;
+            box-shadow 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+    style
+head
+body class=p-4 mdp-8 font-sans
+    div class=max-w-7xl mx-auto
+        header class=text-center mb-8
+            h1 class=text-3xl font-bold text-gray-80016-Channel IoT Monitoring & Controlh1
+            p id=totalPower class=text-xl font-medium mt-2 text-gray-600Total Live Power span id=totalPowerValue class=font-bold text-primary-blue--span Wp
+        header
+
+        !-- Navigation Tabs --
+        nav class=flex justify-center space-x-4 mb-8 bg-white p-3 rounded-xl shadow-md sticky top-0 z-10
+            button class=tab-button px-4 py-2 text-lg text-gray-600 active data-tab=controlControl Panelbutton
+            button class=tab-button px-4 py-2 text-lg text-gray-600 data-tab=liveLive Readingsbutton
+            button class=tab-button px-4 py-2 text-lg text-gray-600 data-tab=historyPower Historybutton
+        nav
+
+        !-- Login Form --
+        div id=loginForm class=max-w-md mx-auto bg-white p-6 rounded-xl shadow-lg style=display none;
+            p class=text-center text-red-500 mb-4 font-semiboldLog in to control the system.p
+            input type=email id=email value=abc@gmail.com placeholder=Email class=w-full p-3 mb-4 border border-gray-300 rounded-lg focusoutline-none focusring-2 focusring-blue-500
+            input type=password id=password value=12345678 placeholder=Password class=w-full p-3 mb-6 border border-gray-300 rounded-lg focusoutline-none focusring-2 focusring-blue-500
+            button id=loginBtn class=w-full bg-blue-600 text-white p-3 rounded-lg font-semibold hoverbg-blue-700 transitionLoginbutton
+        div
+
+        !-- Dashboard Content --
+        div id=dashboard class=content-area style=display none;
+
+            !-- Control Panel Tab --
+            div data-page=control class=tab-content
+                div class=flex justify-center space-x-4 mb-8
+                    button id=allOnBtn class=bg-primary-green hoverbg-green-600 text-white font-bold py-3 px-6 rounded-xl transition shadow-mdALL ONbutton
+                    button id=allOffBtn class=bg-primary-red hoverbg-red-600 text-white font-bold py-3 px-6 rounded-xl transition shadow-mdALL OFFbutton
+                div
+
+                div id=relayContainer class=grid grid-cols-2 mdgrid-cols-4 lggrid-cols-6 xlgrid-cols-8 gap-4
+                    !-- Relay cards will be generated here --
+                div
+            div
+
+            !-- Live Readings Tab --
+            div data-page=live class=tab-content hidden
+                h2 class=text-2xl font-bold text-gray-800 mb-6Real-Time VIP Data (Per Channel)h2
+                div id=readingsContainer class=grid grid-cols-1 smgrid-cols-2 lggrid-cols-3 xlgrid-cols-4 gap-4
+                    !-- Reading cards generated here --
+                div
+            div
+
+            !-- HistoryGraphs Tab --
+            div data-page=history class=tab-content hidden
+                h2 class=text-2xl font-bold text-gray-800 mb-6Historical Power Consumptionh2
+                div class=max-w-md mx-auto mb-6
+                    label for=relaySelector class=block text-lg font-medium text-gray-700 mb-2Select Relay to Analyzelabel
+                    select id=relaySelector class=w-full p-3 border border-gray-300 rounded-lg focusoutline-none focusring-2 focusring-primary-blue
+                        !-- Options generated dynamically --
+                    select
+                    div class=mt-4 flex justify-center
+                        button id=fetchHistoryBtn class=bg-primary-blue text-white py-2 px-4 rounded-lg hoverbg-blue-700 transition shadow-mdLoad Last 100 Pointsbutton
+                    div
+                div
+                
+                div class=chart-container
+                    canvas id=powerChartcanvas
+                div
+                
+                p id=graphMessage class=text-center text-gray-500 mt-4Select a relay and click 'Load' to view its historical power trend.p
+            div
+            
+            button id=logoutBtn class=mt-8 bg-gray-500 text-white p-3 rounded-xl hoverbg-gray-600 transition font-semibold max-w-xs mx-auto w-fullLogoutbutton
+        div
+    div
+
+    !-- JavaScript Logic --
+    script
+        const firebaseConfig = {
+  apiKey: "AIzaSyB7nIkdDiqfc9mLuQRo0JjE0qgxuswaDtM",
+  authDomain: "relay-with-v-i-p.firebaseapp.com",
+  databaseURL: "https://relay-with-v-i-p-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "relay-with-v-i-p",
+  storageBucket: "relay-with-v-i-p.firebasestorage.app",
+  messagingSenderId: "650715403677",
+  appId: "1:650715403677:web:4448e95c9e012aef7e0b74",
+  measurementId: "G-5K8PEX116E"
+};
+        firebase.initializeApp(firebaseConfig);
+        
+        const NUM_RELAYS = 16;
+        const DB = firebase.database();
+        const AUTH = firebase.auth();
+        const allowedEmail = abc@gmail.com;
+        const allowedPassword = 12345678;
+        let powerChartInstance = null;
+
+         --- AUTHENTICATION & UI SETUP ---
+        
+        AUTH.onAuthStateChanged(user = {
+            const loginForm = document.getElementById(loginForm);
+            const dashboard = document.getElementById(dashboard);
+            
+            if (user) {
+                loginForm.style.display = none;
+                dashboard.style.display = block;
+                initDashboard();
+            } else {
+                loginForm.style.display = block;
+                dashboard.style.display = none;
+            }
+        });
+
+        document.getElementById(loginBtn).addEventListener(click, handleLogin);
+        document.getElementById(logoutBtn).addEventListener(click, handleLogout);
+
+        function handleLogin() {
+            const email = document.getElementById(email).value.trim();
+            const password = document.getElementById(password).value;
+            
+            if (!email  !password) return showCustomAlert(Please enter email and password., 'red');
+            
+            if (email === allowedEmail && password === allowedPassword) {
+                AUTH.signInWithEmailAndPassword(email, password)
+                    .catch(error = {
+                        showCustomAlert(Firebase login failed  + error.message, 'red');
+                    });
+            } else {
+                showCustomAlert(Invalid email or password., 'red');
+            }
+        }
+
+        function handleLogout() {
+            AUTH.signOut()
+                .then(() = {
+                    document.getElementById(email).value = allowedEmail;
+                    document.getElementById(password).value = ;
+                })
+                .catch(error = showCustomAlert(Logout failed  + error.message, 'red'));
+        }
+
+        function showCustomAlert(message, color = 'blue') {
+             Replaces alert() with a custom UI message
+            const notification = document.createElement('div');
+            notification.textContent = message;
+            notification.className = `fixed bottom-4 right-4 p-4 rounded-lg text-white font-bold shadow-xl z-50 bg-${color}-600`;
+            document.body.appendChild(notification);
+            
+            setTimeout(() = {
+                notification.remove();
+            }, 3000);
+        }
+
+        function initDashboard() {
+            generateRelayUI();
+            startFirebaseListeners();
+            setupNavigation();
+            setupHistorySelector();
+        }
+
+         --- PAGE GENERATION ---
+
+        function generateRelayUI() {
+            const relayContainer = document.getElementById(relayContainer);
+            const readingsContainer = document.getElementById(readingsContainer);
+            
+            relayContainer.innerHTML = '';
+            readingsContainer.innerHTML = '';
+
+            for (let i = 1; i = NUM_RELAYS; i++) {
+                 Control Card
+                const controlCard = document.createElement(div);
+                controlCard.className = relay-card bg-white rounded-xl p-4 flex flex-col items-center justify-between;
+                controlCard.innerHTML = `
+                    h2 class=text-xl font-semibold mb-2Relay ${i}h2
+                    div id=status-chip-${i} class=status-off text-white font-bold py-1 px-3 rounded-full mb-3 text-smOFFdiv
+                    button id=btn-${i} data-relay-id=${i} class=w-full bg-blue-500 text-white p-3 rounded-lg font-medium hoverbg-blue-600 transition onclick=toggleRelay(${i})Turn ONbutton
+                `;
+                relayContainer.appendChild(controlCard);
+
+                 Reading Card
+                const readingCard = document.createElement(div);
+                readingCard.className = reading-card bg-white rounded-xl p-4 text-left border-l-4 border-primary-blue;
+                readingCard.innerHTML = `
+                    h3 class=text-lg font-bold text-gray-800R${i}h3
+                    p class=text-xs text-gray-500Last span id=time-${i}--spanp
+                    div class=mt-2 space-y-1
+                        pstrongVstrong span id=V-${i} class=font-semibold0.00span Vp
+                        pstrongIstrong span id=I-${i} class=font-semibold0.00span Ap
+                        pstrongPstrong span id=P-${i} class=font-semibold0.00span Wp
+                    div
+                `;
+                readingsContainer.appendChild(readingCard);
+            }
+        }
+
+         --- FIREBASE LISTENERS & DATA FUNCTIONS ---
+
+        function startFirebaseListeners() {
+             1. Listener for Control States
+            for (let i = 1; i = NUM_RELAYS; i++) {
+                const relayRef = DB.ref(relay + i);
+                relayRef.on(value, snapshot = updateRelayControlUI(i, snapshot.val()));
+            }
+
+             2. Listener for Live Sensor Readings (Single full update)
+            const liveRef = DB.ref(live_readings);
+            liveRef.on(value, snapshot = updateLiveReadingsUI(snapshot.val()));
+            
+             Master Buttons
+            document.getElementById(allOnBtn).onclick = () = setAllRelays(true);
+            document.getElementById(allOffBtn).onclick = () = setAllRelays(false);
+        }
+        
+        function toggleRelay(id) {
+            const button = document.getElementById(`btn-${id}`);
+            button.disabled = true;
+            button.textContent = 'Loading...';
+
+            const relayRef = DB.ref(relay + id);
+            relayRef.get().then(snap = {
+                const newState = !snap.val();
+                return relayRef.set(newState);
+            })
+            .finally(() = {
+                 The on('value') listener handles the button text update
+                button.disabled = false;
+            })
+            .catch(e = {
+                console.error(Toggle failed, e);
+                showCustomAlert(Failed to toggle relay., 'red');
+            });
+        }
+        
+        function setAllRelays(state) {
+            const updates = {};
+            for (let i = 1; i = NUM_RELAYS; i++) {
+                updates[relay + i] = state;
+            }
+            DB.ref().update(updates)
+                .then(() = showCustomAlert(`All relays set to ${state  'ON'  'OFF'}!`, 'primary-green'))
+                .catch(e = {
+                    console.error(Set All failed, e);
+                    showCustomAlert(Failed to set all relays., 'red');
+                });
+        }
+
+         --- UI UPDATERS ---
+
+        function updateRelayControlUI(id, state) {
+            const chip = document.getElementById(`status-chip-${id}`);
+            const button = document.getElementById(`btn-${id}`);
+            
+            if (chip) {
+                chip.textContent = state  ON  OFF;
+                chip.className = state  status-on text-white font-bold py-1 px-3 rounded-full mb-3 text-sm  status-off text-white font-bold py-1 px-3 rounded-full mb-3 text-sm;
+                button.textContent = state  Turn OFF  Turn ON;
+                button.className = state  w-full bg-primary-red text-white p-3 rounded-lg font-medium hoverbg-red-600 transition  w-full bg-primary-blue text-white p-3 rounded-lg font-medium hoverbg-blue-600 transition;
+            }
+        }
+
+        function updateLiveReadingsUI(liveData) {
+            let totalPower = 0;
+            if (!liveData) return;
+
+            for (let i = 1; i = NUM_RELAYS; i++) {
+                const data = liveData[`R${i}`];
+                if (data) {
+                    const V = data.V  0;
+                    const I = data.I  0;
+                    const P = data.P  0;
+                    
+                    document.getElementById(`V-${i}`).textContent = V.toFixed(2);
+                    document.getElementById(`I-${i}`).textContent = I.toFixed(2);
+                    document.getElementById(`P-${i}`).textContent = P.toFixed(2);
+                    
+                    if (data.timestamp) {
+                        const date = new Date(data.timestamp  1000);
+                        document.getElementById(`time-${i}`).textContent = date.toLocaleTimeString();
+                    }
+
+                    totalPower += P;
+                }
+            }
+            document.getElementById(totalPowerValue).textContent = totalPower.toFixed(2);
+        }
+
+         --- TAB NAVIGATION ---
+
+        function setupNavigation() {
+            const tabButtons = document.querySelectorAll(.tab-button);
+            const tabContents = document.querySelectorAll(.tab-content);
+
+            tabButtons.forEach(button = {
+                button.addEventListener(click, () = {
+                    const targetPage = button.getAttribute(data-tab);
+                    
+                     Update button styles
+                    tabButtons.forEach(btn = btn.classList.remove(active));
+                    button.classList.add(active);
+
+                     Switch content
+                    tabContents.forEach(content = content.classList.add(hidden));
+                    document.querySelector(`[data-page=${targetPage}]`).classList.remove(hidden);
+                });
+            });
+             Initial load of Control Panel
+            document.querySelector('.tab-button[data-tab=control]').click();
+        }
+        
+         --- HISTORY CHARTING ---
+
+        function setupHistorySelector() {
+            const selector = document.getElementById(relaySelector);
+            for (let i = 1; i = NUM_RELAYS; i++) {
+                const option = document.createElement(option);
+                option.value = i;
+                option.textContent = `Relay ${i}`;
+                selector.appendChild(option);
+            }
+            selector.insertAdjacentHTML('afterbegin', 'option value= disabled selected-- Select a Relay --option');
+            
+            document.getElementById(fetchHistoryBtn).addEventListener(click, () = {
+                const relayId = selector.value;
+                if (relayId) loadHistoryData(parseInt(relayId));
+            });
+        }
+
+        function loadHistoryData(relayId) {
+            document.getElementById(graphMessage).textContent = `Loading history for Relay ${relayId}...`;
+            
+             Query Firebase for the LAST 100 records for the selected relay.
+            const historyRef = DB.ref(`historyR${relayId}`)
+                .orderByKey()
+                .limitToLast(100);
+
+            historyRef.once('value')
+                .then(snapshot = {
+                    const rawData = snapshot.val();
+                    if (!rawData) {
+                        document.getElementById(graphMessage).textContent = `No historical data found for Relay ${relayId}. Ensure the ESP32 is running.`;
+                        destroyChart();
+                        return;
+                    }
+
+                    const labels = [];
+                    const powerData = [];
+                    
+                    Object.keys(rawData).forEach(key = {
+                        const record = rawData[key];
+                         Convert Unix timestamp (seconds) to human-readable time
+                        const date = new Date(record.timestamp  1000);
+                        labels.push(date.toLocaleTimeString() + ' ' + date.toLocaleDateString());
+                        powerData.push(parseFloat(record.P.toFixed(2)));
+                    });
+                    
+                    document.getElementById(graphMessage).textContent = `Showing last ${powerData.length} data points for Relay ${relayId}.`;
+                    renderChart(relayId, labels, powerData);
+                })
+                .catch(error = {
+                    console.error(Error fetching history, error);
+                    document.getElementById(graphMessage).textContent = Error fetching history data. Check console for details.;
+                    destroyChart();
+                });
+        }
+
+        function destroyChart() {
+            if (powerChartInstance) {
+                powerChartInstance.destroy();
+                powerChartInstance = null;
+            }
+        }
+        
+        function renderChart(relayId, labels, powerData) {
+            destroyChart();
+
+            const ctx = document.getElementById('powerChart').getContext('2d');
+            powerChartInstance = new Chart(ctx, {
+                type 'line',
+                data {
+                    labels labels,
+                    datasets [{
+                        label `Power (Watts) - Relay ${relayId}`,
+                        data powerData,
+                        borderColor 'rgb(59, 130, 246)', 
+                        borderWidth 2,
+                        fill true,
+                        backgroundColor 'rgba(59, 130, 246, 0.1)',
+                        tension 0.3
+                    }]
+                },
+                options {
+                    responsive true,
+                    maintainAspectRatio false,
+                    scales {
+                        x {
+                            title { display true, text 'Time and Date' },
+                             Hide some ticks if there are too many data points
+                            ticks {
+                                maxRotation 45,
+                                minRotation 45,
+                                autoSkipPadding 20
+                            }
+                        },
+                        y {
+                            title { display true, text 'Power (W)' },
+                            beginAtZero true
+                        }
+                    },
+                    plugins {
+                        legend { display true },
+                        tooltip {
+                            callbacks {
+                                label function(context) {
+                                    return context.dataset.label + ' ' + context.formattedValue + ' W';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+    script
+body
+html
