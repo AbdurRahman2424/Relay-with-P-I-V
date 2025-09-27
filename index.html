@@ -69,13 +69,13 @@
     <div class="max-w-7xl mx-auto">
         <header class="text-center mb-8">
             <h1 class="text-3xl font-bold text-gray-800">16-Channel IoT Monitoring & Control</h1>
-            <p id="totalPower" class="text-xl font-medium mt-2 text-gray-600">Total Live Power: <span id="totalPowerValue" class="font-bold text-primary-blue">--</span> W</p>
+            <p id="totalPower" class="text-xl font-medium mt-2 text-gray-600">Total Live Power: <span id="totalPowerValue" class="font-bold text-primary-blue">0.00</span> W</p>
         </header>
 
         <!-- Navigation Tabs -->
         <nav class="flex justify-center space-x-4 mb-8 bg-white p-3 rounded-xl shadow-md sticky top-0 z-10">
-            <button class="tab-button px-4 py-2 text-lg text-gray-600 active" data-tab="control">Control Panel</button>
-            <button class="tab-button px-4 py-2 text-lg text-gray-600" data-tab="live">Live Readings</button>
+            <button class="tab-button px-4 py-2 text-lg text-gray-600" data-tab="control">Control Panel</button>
+            <button class="tab-button px-4 py-2 text-lg text-gray-600 active" data-tab="live">Live Readings</button>
             <button class="tab-button px-4 py-2 text-lg text-gray-600" data-tab="history">Power History</button>
         </nav>
 
@@ -88,10 +88,10 @@
         </div>
 
         <!-- Dashboard Content -->
-        <div id="dashboard" class="content-area" style="display: none;">
+        <div id="dashboard" class="content-area" style="display: block;">
 
             <!-- Control Panel Tab -->
-            <div data-page="control" class="tab-content">
+            <div data-page="control" class="tab-content hidden">
                 <div class="flex justify-center space-x-4 mb-8">
                     <button id="allOnBtn" class="bg-primary-green hover:bg-green-600 text-white font-bold py-3 px-6 rounded-xl transition shadow-md">ALL ON</button>
                     <button id="allOffBtn" class="bg-primary-red hover:bg-red-600 text-white font-bold py-3 px-6 rounded-xl transition shadow-md">ALL OFF</button>
@@ -106,20 +106,33 @@
             <div data-page="live" class="tab-content hidden">
                 <h2 class="text-2xl font-bold text-gray-800 mb-6">Real-Time V/I/P Data (Per Channel)</h2>
                 <div id="readingsContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    <!-- Reading cards generated here -->
+                    <!-- Reading cards will be generated here -->
                 </div>
             </div>
 
             <!-- History/Graphs Tab -->
             <div data-page="history" class="tab-content hidden">
                 <h2 class="text-2xl font-bold text-gray-800 mb-6">Historical Power Consumption</h2>
-                <div class="max-w-md mx-auto mb-6">
-                    <label for="relaySelector" class="block text-lg font-medium text-gray-700 mb-2">Select Relay to Analyze:</label>
-                    <select id="relaySelector" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-blue">
-                        <!-- Options generated dynamically -->
-                    </select>
-                    <div class="mt-4 flex justify-center">
-                        <button id="fetchHistoryBtn" class="bg-primary-blue text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition shadow-md">Load Last 100 Points</button>
+                <div class="max-w-2xl mx-auto mb-6 p-4 bg-white rounded-xl shadow-md grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <!-- Relay Selector -->
+                    <div class="col-span-1">
+                        <label for="relaySelector" class="block text-sm font-medium text-gray-700 mb-2">Select Relay:</label>
+                        <select id="relaySelector" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-blue">
+                            <!-- Options generated dynamically -->
+                        </select>
+                    </div>
+
+                    <!-- Time Range Selector (NEW) -->
+                    <div class="col-span-1">
+                        <label for="timeRangeSelector" class="block text-sm font-medium text-gray-700 mb-2">Select Time Range:</label>
+                        <select id="timeRangeSelector" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-blue">
+                            <!-- Options generated dynamically -->
+                        </select>
+                    </div>
+
+                    <!-- Button -->
+                    <div class="col-span-1 flex items-end">
+                        <button id="fetchHistoryBtn" class="w-full bg-primary-blue text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 transition shadow-md">Load Data</button>
                     </div>
                 </div>
                 
@@ -127,10 +140,10 @@
                     <canvas id="powerChart"></canvas>
                 </div>
                 
-                <p id="graphMessage" class="text-center text-gray-500 mt-4">Select a relay and click 'Load' to view its historical power trend.</p>
+                <p id="graphMessage" class="text-center text-gray-500 mt-4">Select a relay and time range to load historical data.</p>
             </div>
             
-            <button id="logoutBtn" class="mt-8 bg-gray-500 text-white p-3 rounded-xl hover:bg-gray-600 transition font-semibold max-w-xs mx-auto w-full">Logout</button>
+            <button id="logoutBtn" class="mt-8 bg-gray-500 text-white p-3 rounded-xl hover:bg-gray-600 transition font-semibold max-w-xs mx-auto w-full block">Logout</button>
         </div>
     </div>
 
@@ -142,7 +155,6 @@
             authDomain: "relay-with-v-i-p.firebaseapp.com",
             databaseURL: "https://relay-with-v-i-p-default-rtdb.asia-southeast1.firebasedatabase.app",
             projectId: "relay-with-v-i-p",
-            // The rest of the config is optional for RTDB/Auth
         };
         firebase.initializeApp(firebaseConfig);
         
@@ -152,6 +164,16 @@
         const allowedEmail = "abc@gmail.com";
         const allowedPassword = "12345678";
         let powerChartInstance = null;
+        let activeTab = 'control'; // Track the active tab
+
+        // Time intervals in seconds (used for calculating start timestamp)
+        const TIME_RANGES = {
+            '1h': { label: 'Last Hour (Raw)', seconds: 3600, aggregate: 'raw' },
+            '1d': { label: 'Last Day (Hourly Avg)', seconds: 86400, aggregate: 'hour' }, // Hourly average for 24 points
+            '1w': { label: 'Last Week (Daily Avg)', seconds: 604800, aggregate: 'day' }, // Daily average for 7 points
+            '1m': { label: 'Last Month (Daily Avg)', seconds: 2592000, aggregate: 'day' }, // Daily average for ~30 points
+            '1y': { label: 'Last Year (Monthly Avg)', seconds: 31536000, aggregate: 'month' } // Monthly average for 12 points
+        };
 
         // --- AUTHENTICATION & UI SETUP ---
         
@@ -178,22 +200,20 @@
             
             if (!email || !password) return showCustomAlert("Please enter email and password.", 'red');
             
-            // We use the same credentials for web login as the ESP32 uses for authentication
-            if (email === allowedEmail && password === allowedPassword) {
-                AUTH.signInWithEmailAndPassword(email, password)
-                    .catch(error => {
-                        showCustomAlert("Firebase login failed: " + error.message, 'red');
-                    });
-            } else {
-                showCustomAlert("Invalid email or password.", 'red');
-            }
+            // Note: Firebase login failed if the user hasn't been created yet. 
+            // The ESP32 code provides the credentials; they must be registered in Firebase Auth first.
+            AUTH.signInWithEmailAndPassword(email, password)
+                .catch(error => {
+                    showCustomAlert("Firebase login failed: " + error.message, 'red');
+                });
         }
 
         function handleLogout() {
             AUTH.signOut()
                 .then(() => {
+                    // Reset input values on logout
                     document.getElementById("email").value = allowedEmail;
-                    document.getElementById("password").value = "";
+                    document.getElementById("password").value = allowedPassword; // Prefill password for easy re-login
                 })
                 .catch(error => showCustomAlert("Logout failed: " + error.message, 'red'));
         }
@@ -202,7 +222,9 @@
             // Replaces alert() with a custom UI message
             const notification = document.createElement('div');
             notification.textContent = message;
-            notification.className = `fixed bottom-4 right-4 p-4 rounded-lg text-white font-bold shadow-xl z-50 bg-${color}-600`;
+            // Use dynamic color class based on input (e.g., bg-red-600)
+            const bgColor = (color === 'primary-green') ? 'bg-primary-green' : (color === 'red') ? 'bg-primary-red' : 'bg-primary-blue';
+            notification.className = `fixed bottom-4 right-4 p-4 rounded-lg text-white font-bold shadow-xl z-50 ${bgColor}`;
             document.body.appendChild(notification);
             
             setTimeout(() => {
@@ -215,9 +237,11 @@
             startFirebaseListeners();
             setupNavigation();
             setupHistorySelector();
+            // Automatically click the Live tab to match the old behavior, but use Control panel by default
+            document.querySelector('.tab-button[data-tab="live"]').click();
         }
 
-        // --- PAGE GENERATION ---
+        // --- PAGE GENERATION (unchanged, but required for completeness) ---
 
         function generateRelayUI() {
             const relayContainer = document.getElementById("relayContainer");
@@ -253,13 +277,12 @@
             }
         }
 
-        // --- FIREBASE LISTENERS & DATA FUNCTIONS ---
+        // --- FIREBASE LISTENERS & DATA FUNCTIONS (Simplified for modern SDK, using compat for continuity) ---
 
         function startFirebaseListeners() {
             // 1. Listener for Control States
             for (let i = 1; i <= NUM_RELAYS; i++) {
                 const relayRef = DB.ref("/relay" + i);
-                // Note: The /relayX path holds the simple boolean state for ESP control
                 relayRef.on("value", snapshot => updateRelayControlUI(i, snapshot.val()));
             }
 
@@ -279,7 +302,9 @@
 
             const relayRef = DB.ref("/relay" + id);
             relayRef.get().then(snap => {
-                const newState = !snap.val();
+                const currentState = snap.val();
+                // If snap.val() is null, assume OFF (false) and turn ON (true)
+                const newState = (currentState === null || currentState === false) ? true : false;
                 return relayRef.set(newState);
             })
             .finally(() => {
@@ -288,7 +313,7 @@
             })
             .catch(e => {
                 console.error("Toggle failed:", e);
-                showCustomAlert("Failed to toggle relay.", 'red');
+                showCustomAlert("Failed to toggle relay. Check console.", 'red');
             });
         }
         
@@ -305,17 +330,18 @@
                 });
         }
 
-        // --- UI UPDATERS ---
+        // --- UI UPDATERS (mostly unchanged) ---
 
         function updateRelayControlUI(id, state) {
             const chip = document.getElementById(`status-chip-${id}`);
             const button = document.getElementById(`btn-${id}`);
             
             if (chip) {
-                chip.textContent = state ? "ON" : "OFF";
-                chip.className = state ? "status-on text-white font-bold py-1 px-3 rounded-full mb-3 text-sm" : "status-off text-white font-bold py-1 px-3 rounded-full mb-3 text-sm";
-                button.textContent = state ? "Turn OFF" : "Turn ON";
-                button.className = state ? "w-full bg-primary-red text-white p-3 rounded-lg font-medium hover:bg-red-600 transition" : "w-full bg-primary-blue text-white p-3 rounded-lg font-medium hover:bg-blue-600 transition";
+                const isOn = !!state; // Ensure state is treated as boolean
+                chip.textContent = isOn ? "ON" : "OFF";
+                chip.className = isOn ? "status-on text-white font-bold py-1 px-3 rounded-full mb-3 text-sm" : "status-off text-white font-bold py-1 px-3 rounded-full mb-3 text-sm";
+                button.textContent = isOn ? "Turn OFF" : "Turn ON";
+                button.className = isOn ? "w-full bg-primary-red text-white p-3 rounded-lg font-medium hover:bg-red-600 transition" : "w-full bg-primary-blue text-white p-3 rounded-lg font-medium hover:bg-blue-600 transition";
             }
         }
 
@@ -325,7 +351,7 @@
 
             for (let i = 1; i <= NUM_RELAYS; i++) {
                 const data = liveData[`R${i}`];
-                if (data) {
+                if (data && data.state === true) { // Only count power if the relay state is ON
                     const V = data.V || 0;
                     const I = data.I || 0;
                     const P = data.P || 0;
@@ -340,12 +366,21 @@
                     }
 
                     totalPower += P;
+                } else if (data && data.state === false) {
+                    // Show 0.00 if the relay is off, based on the ESP code logic
+                    document.getElementById(`V-${i}`).textContent = (0.00).toFixed(2);
+                    document.getElementById(`I-${i}`).textContent = (0.00).toFixed(2);
+                    document.getElementById(`P-${i}`).textContent = (0.00).toFixed(2);
+                    if (data.timestamp) {
+                        const date = new Date(data.timestamp * 1000);
+                        document.getElementById(`time-${i}`).textContent = date.toLocaleTimeString();
+                    }
                 }
             }
             document.getElementById("totalPowerValue").textContent = totalPower.toFixed(2);
         }
 
-        // --- TAB NAVIGATION ---
+        // --- TAB NAVIGATION (Minor adjustment for default tab) ---
 
         function setupNavigation() {
             const tabButtons = document.querySelectorAll(".tab-button");
@@ -354,6 +389,7 @@
             tabButtons.forEach(button => {
                 button.addEventListener("click", () => {
                     const targetPage = button.getAttribute("data-tab");
+                    activeTab = targetPage;
                     
                     // Update button styles
                     tabButtons.forEach(btn => btn.classList.remove("active"));
@@ -364,63 +400,167 @@
                     document.querySelector(`[data-page="${targetPage}"]`).classList.remove("hidden");
                 });
             });
-            // Initial load of Control Panel
-            document.querySelector('.tab-button[data-tab="control"]').click();
+            // Initial load of the Live Readings Panel
+            document.querySelector('.tab-button[data-tab="live"]').click();
         }
         
-        // --- HISTORY CHARTING ---
+        // --- HISTORY CHARTING (MODIFIED FOR AGGREGATION) ---
 
         function setupHistorySelector() {
-            const selector = document.getElementById("relaySelector");
+            const relaySelector = document.getElementById("relaySelector");
+            const timeRangeSelector = document.getElementById("timeRangeSelector");
+            
+            // 1. Populate Relay Selector
+            relaySelector.innerHTML = '<option value="" disabled selected>-- Select a Relay --</option>';
             for (let i = 1; i <= NUM_RELAYS; i++) {
                 const option = document.createElement("option");
                 option.value = i;
                 option.textContent = `Relay ${i}`;
-                selector.appendChild(option);
+                relaySelector.appendChild(option);
             }
-            selector.insertAdjacentHTML('afterbegin', '<option value="" disabled selected>-- Select a Relay --</option>');
             
+            // 2. Populate Time Range Selector
+            timeRangeSelector.innerHTML = '<option value="" disabled selected>-- Select Time Range --</option>';
+            for (const key in TIME_RANGES) {
+                const option = document.createElement("option");
+                option.value = key;
+                option.textContent = TIME_RANGES[key].label;
+                timeRangeSelector.appendChild(option);
+            }
+            
+            // 3. Attach Event Listener
             document.getElementById("fetchHistoryBtn").addEventListener("click", () => {
-                const relayId = selector.value;
-                if (relayId) loadHistoryData(parseInt(relayId));
+                const relayId = relaySelector.value;
+                const timeRangeKey = timeRangeSelector.value;
+
+                if (!relayId || !timeRangeKey) {
+                    showCustomAlert("Please select both a Relay and a Time Range.", 'red');
+                    return;
+                }
+                loadHistoryData(parseInt(relayId), timeRangeKey);
             });
         }
 
-        function loadHistoryData(relayId) {
-            document.getElementById("graphMessage").textContent = `Loading history for Relay ${relayId}...`;
+        /**
+         * Generates a key for aggregation based on time unit (UTC to ensure consistency).
+         * @param {number} timestamp - Unix timestamp in seconds.
+         * @param {string} unit - 'hour', 'day', 'month', or 'raw'.
+         * @returns {string} Aggregation key.
+         */
+        function getAggregationKey(timestamp, unit) {
+            const date = new Date(timestamp * 1000);
+            const year = date.getUTCFullYear();
+            const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(date.getUTCDate()).padStart(2, '0');
+            const hour = String(date.getUTCHours()).padStart(2, '0');
+
+            if (unit === 'month') {
+                return `${year}-${month}`; // 12 points for year view
+            }
+            if (unit === 'day') {
+                return `${year}-${month}-${day}`; // 7 or 30 points for week/month view
+            }
+            if (unit === 'hour') {
+                return `${year}-${month}-${day} ${hour}:00`; // 24 points for day view
+            }
+            return timestamp.toString(); // Raw data
+        }
+
+        /**
+         * Aggregates raw data records into time-based averages.
+         * @param {Array<Object>} records - Array of raw data objects from Firebase.
+         * @param {string} aggregateUnit - 'hour', 'day', 'month', or 'raw'.
+         * @returns {{labels: Array<string>, powerData: Array<number>}} Aggregated data.
+         */
+        function aggregateData(records, aggregateUnit) {
+            if (aggregateUnit === 'raw') {
+                const rawLabels = records.map(record => new Date(record.timestamp * 1000).toLocaleTimeString() + ' ' + new Date(record.timestamp * 1000).toLocaleDateString());
+                const rawPower = records.map(record => parseFloat(record.P.toFixed(2)));
+                return { labels: rawLabels, powerData: rawPower };
+            }
+
+            const dataMap = new Map();
+
+            records.forEach(record => {
+                const key = getAggregationKey(record.timestamp, aggregateUnit);
+                const power = record.P || 0;
+
+                if (!dataMap.has(key)) {
+                    dataMap.set(key, { sum: 0, count: 0 });
+                }
+
+                const entry = dataMap.get(key);
+                entry.sum += power;
+                entry.count += 1;
+            });
+
+            // Convert map to sorted arrays
+            const sortedKeys = Array.from(dataMap.keys()).sort();
+            const labels = [];
+            const powerData = [];
+
+            sortedKeys.forEach(key => {
+                const entry = dataMap.get(key);
+                const avgPower = entry.count > 0 ? entry.sum / entry.count : 0;
+                
+                // Format label based on aggregation unit
+                if (aggregateUnit === 'month') {
+                    // Key is YYYY-MM
+                    labels.push(new Date(key + "-01").toLocaleDateString('en-US', { year: 'numeric', month: 'short' }));
+                } else if (aggregateUnit === 'day') {
+                    // Key is YYYY-MM-DD
+                    labels.push(new Date(key).toLocaleDateString());
+                } else if (aggregateUnit === 'hour') {
+                    // Key is YYYY-MM-DD HH:00
+                    labels.push(new Date(key).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) + ' ' + new Date(key).toLocaleDateString());
+                }
+                
+                powerData.push(parseFloat(avgPower.toFixed(2)));
+            });
+
+            return { labels, powerData };
+        }
+
+        function loadHistoryData(relayId, timeRangeKey) {
+            document.getElementById("graphMessage").textContent = `Fetching historical data for Relay ${relayId}...`;
             
-            // Query Firebase for the LAST 100 records for the selected relay.
-            // Note: The path is correct: /history/R<X>
+            const rangeConfig = TIME_RANGES[timeRangeKey];
+            const startTime = Math.floor(Date.now() / 1000) - rangeConfig.seconds;
+
+            // Query Firebase for all data in the range
             const historyRef = DB.ref(`/history/R${relayId}`)
-                .orderByKey()
-                .limitToLast(100);
+                .orderByChild('timestamp')
+                .startAt(startTime);
 
             historyRef.once('value')
                 .then(snapshot => {
                     const rawData = snapshot.val();
-                    if (!rawData) {
-                        document.getElementById("graphMessage").textContent = `No historical data found for Relay ${relayId}. Ensure the ESP32 is running and logging data.`;
+                    const records = [];
+                    
+                    if (rawData) {
+                        // Convert snapshot object to array, filtering out any records that somehow lack a timestamp
+                        Object.keys(rawData).forEach(key => {
+                            if (rawData[key].timestamp) {
+                                records.push(rawData[key]);
+                            }
+                        });
+                    }
+                    
+                    if (records.length === 0) {
+                        document.getElementById("graphMessage").textContent = `No historical data found for Relay ${relayId} in the ${rangeConfig.label} time range.`;
                         destroyChart();
                         return;
                     }
 
-                    const labels = [];
-                    const powerData = [];
+                    // AGGREGATION STEP
+                    const { labels, powerData } = aggregateData(records, rangeConfig.aggregate);
                     
-                    Object.keys(rawData).forEach(key => {
-                        const record = rawData[key];
-                        // Convert Unix timestamp (seconds) to human-readable time
-                        const date = new Date(record.timestamp * 1000);
-                        labels.push(date.toLocaleTimeString() + ' ' + date.toLocaleDateString());
-                        powerData.push(parseFloat(record.P.toFixed(2)));
-                    });
-                    
-                    document.getElementById("graphMessage").textContent = `Showing last ${powerData.length} data points for Relay ${relayId}.`;
-                    renderChart(relayId, labels, powerData);
+                    document.getElementById("graphMessage").textContent = `Showing aggregated power usage (${rangeConfig.aggregate} average) for Relay ${relayId} over the ${rangeConfig.label}. Total data points: ${powerData.length}.`;
+                    renderChart(relayId, labels, powerData, rangeConfig.label);
                 })
                 .catch(error => {
                     console.error("Error fetching history:", error);
-                    document.getElementById("graphMessage").textContent = "Error fetching history data. Check console for details.";
+                    document.getElementById("graphMessage").textContent = "Error fetching history data. Ensure Firebase rules include an index for 'timestamp'. Check console for details.";
                     destroyChart();
                 });
         }
@@ -432,7 +572,7 @@
             }
         }
         
-        function renderChart(relayId, labels, powerData) {
+        function renderChart(relayId, labels, powerData, timeRangeLabel) {
             destroyChart();
 
             const ctx = document.getElementById('powerChart').getContext('2d');
@@ -441,13 +581,15 @@
                 data: {
                     labels: labels,
                     datasets: [{
-                        label: `Power (Watts) - Relay ${relayId}`,
+                        label: `Average Power (Watts) - Relay ${relayId}`,
                         data: powerData,
                         borderColor: 'rgb(59, 130, 246)', 
                         borderWidth: 2,
                         fill: true,
                         backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                        tension: 0.3
+                        tension: 0.3,
+                        pointRadius: 4, // Make points visible for aggregated data
+                        pointHoverRadius: 6
                     }]
                 },
                 options: {
@@ -455,16 +597,16 @@
                     maintainAspectRatio: false,
                     scales: {
                         x: {
-                            title: { display: true, text: 'Time and Date' },
-                            // Hide some ticks if there are too many data points
+                            title: { display: true, text: `Time (${timeRangeLabel})` },
+                            // For aggregated data, auto-skip can be helpful if the labels are too long
                             ticks: {
                                 maxRotation: 45,
                                 minRotation: 45,
-                                autoSkipPadding: 20
+                                autoSkipPadding: 20,
                             }
                         },
                         y: {
-                            title: { display: true, text: 'Power (W)' },
+                            title: { display: true, text: 'Average Power (W)' },
                             beginAtZero: true
                         }
                     },
@@ -472,8 +614,12 @@
                         legend: { display: true },
                         tooltip: {
                             callbacks: {
+                                title: function(context) {
+                                    // Show the full aggregated period as the title
+                                    return context[0].label; 
+                                },
                                 label: function(context) {
-                                    return context.dataset.label + ': ' + context.formattedValue + ' W';
+                                    return context.dataset.label.replace('Average ', '') + ': ' + context.formattedValue + ' W (Avg)';
                                 }
                             }
                         }
@@ -483,5 +629,7 @@
         }
 
     </script>
+
+
 </body>
 </html>
