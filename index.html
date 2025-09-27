@@ -14,6 +14,8 @@
                         'primary-blue': '#3b82f6',
                         'primary-green': '#10b981',
                         'primary-red': '#ef4444',
+                        'primary-orange': '#f97316',
+                        'primary-purple': '#8b5cf6', // New color for Total Analysis
                     },
                     fontFamily: {
                         sans: ['Inter', 'sans-serif'],
@@ -24,6 +26,10 @@
     </script>
     <!-- Chart.js for graphing -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+    <!-- Luxon & Adapter for advanced Time Series Graphing -->
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.1.0/dist/chartjs-adapter-luxon.min.js"></script>
+    
     <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
@@ -69,14 +75,15 @@
     <div class="max-w-7xl mx-auto">
         <header class="text-center mb-8">
             <h1 class="text-3xl font-bold text-gray-800">16-Channel IoT Monitoring & Control</h1>
-            <p id="totalPower" class="text-xl font-medium mt-2 text-gray-600">Total Live Power: <span id="totalPowerValue" class="font-bold text-primary-blue">0.00</span> W</p>
+            <p id="totalPower" class="text-xl font-medium mt-2 text-gray-600">Total Live Power: <span id="totalPowerValue" class="font-bold text-primary-blue">--</span> W</p>
         </header>
 
         <!-- Navigation Tabs -->
         <nav class="flex justify-center space-x-4 mb-8 bg-white p-3 rounded-xl shadow-md sticky top-0 z-10">
-            <button class="tab-button px-4 py-2 text-lg text-gray-600" data-tab="control">Control Panel</button>
-            <button class="tab-button px-4 py-2 text-lg text-gray-600 active" data-tab="live">Live Readings</button>
-            <button class="tab-button px-4 py-2 text-lg text-gray-600" data-tab="history">Power History</button>
+            <button class="tab-button px-4 py-2 text-lg text-gray-600 active" data-tab="control">Control Panel</button>
+            <button class="tab-button px-4 py-2 text-lg text-gray-600" data-tab="live">Live Readings</button>
+            <button class="tab-button px-4 py-2 text-lg text-gray-600" data-tab="history">Relay History</button>
+            <button class="tab-button px-4 py-2 text-lg text-gray-600" data-tab="total-analysis">Total Analysis</button> <!-- NEW TAB -->
         </nav>
 
         <!-- Login Form -->
@@ -88,10 +95,10 @@
         </div>
 
         <!-- Dashboard Content -->
-        <div id="dashboard" class="content-area" style="display: block;">
+        <div id="dashboard" class="content-area" style="display: none;">
 
             <!-- Control Panel Tab -->
-            <div data-page="control" class="tab-content hidden">
+            <div data-page="control" class="tab-content">
                 <div class="flex justify-center space-x-4 mb-8">
                     <button id="allOnBtn" class="bg-primary-green hover:bg-green-600 text-white font-bold py-3 px-6 rounded-xl transition shadow-md">ALL ON</button>
                     <button id="allOffBtn" class="bg-primary-red hover:bg-red-600 text-white font-bold py-3 px-6 rounded-xl transition shadow-md">ALL OFF</button>
@@ -106,33 +113,35 @@
             <div data-page="live" class="tab-content hidden">
                 <h2 class="text-2xl font-bold text-gray-800 mb-6">Real-Time V/I/P Data (Per Channel)</h2>
                 <div id="readingsContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    <!-- Reading cards will be generated here -->
+                    <!-- Reading cards generated here -->
                 </div>
             </div>
 
-            <!-- History/Graphs Tab -->
+            <!-- History/Graphs Tab (Single Relay Analysis) -->
             <div data-page="history" class="tab-content hidden">
-                <h2 class="text-2xl font-bold text-gray-800 mb-6">Historical Power Consumption</h2>
-                <div class="max-w-2xl mx-auto mb-6 p-4 bg-white rounded-xl shadow-md grid grid-cols-1 gap-4 sm:grid-cols-3">
-                    <!-- Relay Selector -->
-                    <div class="col-span-1">
-                        <label for="relaySelector" class="block text-sm font-medium text-gray-700 mb-2">Select Relay:</label>
-                        <select id="relaySelector" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-blue">
-                            <!-- Options generated dynamically -->
-                        </select>
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">Individual Relay Consumption Analysis</h2>
+                
+                <!-- Selector and Date Picker -->
+                <div class="max-w-4xl mx-auto mb-6 p-4 bg-white rounded-xl shadow-lg">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end mb-4">
+                        <div>
+                            <label for="relaySelector" class="block text-sm font-medium text-gray-700 mb-1">Select Relay:</label>
+                            <select id="relaySelector" class="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-blue">
+                                <!-- Options generated dynamically -->
+                            </select>
+                        </div>
+                        <div id="dateRangeInput">
+                            <label for="startDate" class="block text-sm font-medium text-gray-700 mb-1">Start Date:</label>
+                            <input type="date" id="startDate" class="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-blue">
+                        </div>
+                        <button id="fetchHistoryBtn" class="bg-primary-blue text-white py-2 px-4 rounded-lg font-semibold hover:bg-blue-700 transition shadow-md sm:mt-0 mt-4">Load Date Range</button>
                     </div>
 
-                    <!-- Time Range Selector (NEW) -->
-                    <div class="col-span-1">
-                        <label for="timeRangeSelector" class="block text-sm font-medium text-gray-700 mb-2">Select Time Range:</label>
-                        <select id="timeRangeSelector" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-blue">
-                            <!-- Options generated dynamically -->
-                        </select>
-                    </div>
-
-                    <!-- Button -->
-                    <div class="col-span-1 flex items-end">
-                        <button id="fetchHistoryBtn" class="w-full bg-primary-blue text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 transition shadow-md">Load Data</button>
+                    <!-- Shortcut Buttons -->
+                    <div class="flex justify-center space-x-3 flex-wrap mt-4">
+                        <button id="lastHourBtn" class="bg-primary-orange text-white py-2 px-4 rounded-lg font-semibold hover:bg-orange-600 transition shadow-md text-sm mb-2">Last Hour</button>
+                        <button id="last30DaysBtn" class="bg-primary-orange text-white py-2 px-4 rounded-lg font-semibold hover:bg-orange-600 transition shadow-md text-sm mb-2">Last 30 Days</button>
+                        <button id="dailyAvgBtn" class="bg-primary-green text-white py-2 px-4 rounded-lg font-semibold hover:bg-green-600 transition shadow-md text-sm mb-2">Hourly Average</button>
                     </div>
                 </div>
                 
@@ -140,10 +149,30 @@
                     <canvas id="powerChart"></canvas>
                 </div>
                 
-                <p id="graphMessage" class="text-center text-gray-500 mt-4">Select a relay and time range to load historical data.</p>
+                <p id="graphMessage" class="text-center text-gray-500 mt-4">Select a relay and criteria above to view its historical power trend.</p>
             </div>
+
+            <!-- NEW TOTAL ANALYSIS TAB -->
+            <div data-page="total-analysis" class="tab-content hidden">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">Total System Consumption Analytics</h2>
+                <div class="max-w-4xl mx-auto mb-6 p-4 bg-white rounded-xl shadow-lg">
+                    <p class="text-lg font-semibold text-gray-700 mb-4">View Aggregated Data for All 16 Relays</p>
+                    <div class="flex justify-center space-x-3 flex-wrap">
+                        <button id="totalLastHourBtn" class="bg-primary-purple text-white py-2 px-4 rounded-lg font-semibold hover:bg-purple-600 transition shadow-md text-sm mb-2">Total Last Hour</button>
+                        <button id="totalLast30DaysBtn" class="bg-primary-purple text-white py-2 px-4 rounded-lg font-semibold hover:bg-purple-600 transition shadow-md text-sm mb-2">Total Last 30 Days</button>
+                        <button id="totalDailyAvgBtn" class="bg-primary-purple text-white py-2 px-4 rounded-lg font-semibold hover:bg-purple-600 transition shadow-md text-sm mb-2">Total Hourly Average</button>
+                    </div>
+                </div>
+
+                <div class="chart-container">
+                    <canvas id="totalPowerChart"></canvas>
+                </div>
+                
+                <p id="totalGraphMessage" class="text-center text-gray-500 mt-4">Click a button above to view system-wide aggregated consumption data.</p>
+            </div>
+            <!-- END NEW TOTAL ANALYSIS TAB -->
             
-            <button id="logoutBtn" class="mt-8 bg-gray-500 text-white p-3 rounded-xl hover:bg-gray-600 transition font-semibold max-w-xs mx-auto w-full block">Logout</button>
+            <button id="logoutBtn" class="mt-8 bg-gray-500 text-white p-3 rounded-xl hover:bg-gray-600 transition font-semibold max-w-xs mx-auto w-full">Logout</button>
         </div>
     </div>
 
@@ -164,16 +193,7 @@
         const allowedEmail = "abc@gmail.com";
         const allowedPassword = "12345678";
         let powerChartInstance = null;
-        let activeTab = 'control'; // Track the active tab
-
-        // Time intervals in seconds (used for calculating start timestamp)
-        const TIME_RANGES = {
-            '1h': { label: 'Last Hour (Raw)', seconds: 3600, aggregate: 'raw' },
-            '1d': { label: 'Last Day (Hourly Avg)', seconds: 86400, aggregate: 'hour' }, // Hourly average for 24 points
-            '1w': { label: 'Last Week (Daily Avg)', seconds: 604800, aggregate: 'day' }, // Daily average for 7 points
-            '1m': { label: 'Last Month (Daily Avg)', seconds: 2592000, aggregate: 'day' }, // Daily average for ~30 points
-            '1y': { label: 'Last Year (Monthly Avg)', seconds: 31536000, aggregate: 'month' } // Monthly average for 12 points
-        };
+        let totalPowerChartInstance = null; // NEW: For the total analysis tab
 
         // --- AUTHENTICATION & UI SETUP ---
         
@@ -200,31 +220,29 @@
             
             if (!email || !password) return showCustomAlert("Please enter email and password.", 'red');
             
-            // Note: Firebase login failed if the user hasn't been created yet. 
-            // The ESP32 code provides the credentials; they must be registered in Firebase Auth first.
-            AUTH.signInWithEmailAndPassword(email, password)
-                .catch(error => {
-                    showCustomAlert("Firebase login failed: " + error.message, 'red');
-                });
+            if (email === allowedEmail && password === allowedPassword) {
+                AUTH.signInWithEmailAndPassword(email, password)
+                    .catch(error => {
+                        showCustomAlert("Firebase login failed: " + error.message, 'red');
+                    });
+            } else {
+                showCustomAlert("Invalid email or password.", 'red');
+            }
         }
 
         function handleLogout() {
             AUTH.signOut()
                 .then(() => {
-                    // Reset input values on logout
                     document.getElementById("email").value = allowedEmail;
-                    document.getElementById("password").value = allowedPassword; // Prefill password for easy re-login
+                    document.getElementById("password").value = "";
                 })
                 .catch(error => showCustomAlert("Logout failed: " + error.message, 'red'));
         }
 
         function showCustomAlert(message, color = 'blue') {
-            // Replaces alert() with a custom UI message
             const notification = document.createElement('div');
             notification.textContent = message;
-            // Use dynamic color class based on input (e.g., bg-red-600)
-            const bgColor = (color === 'primary-green') ? 'bg-primary-green' : (color === 'red') ? 'bg-primary-red' : 'bg-primary-blue';
-            notification.className = `fixed bottom-4 right-4 p-4 rounded-lg text-white font-bold shadow-xl z-50 ${bgColor}`;
+            notification.className = `fixed bottom-4 right-4 p-4 rounded-lg text-white font-bold shadow-xl z-50 bg-${color}-600`;
             document.body.appendChild(notification);
             
             setTimeout(() => {
@@ -237,11 +255,20 @@
             startFirebaseListeners();
             setupNavigation();
             setupHistorySelector();
-            // Automatically click the Live tab to match the old behavior, but use Control panel by default
-            document.querySelector('.tab-button[data-tab="live"]').click();
+            setupTotalAnalysisListeners(); // NEW: Setup total analysis buttons
+            // Set default date to today
+            document.getElementById('startDate').valueAsDate = new Date();
+            // Load the default view on the history tab: Last Hour for Relay 1
+            setTimeout(() => {
+                const selector = document.getElementById("relaySelector");
+                if (selector.options.length > 1) {
+                    selector.value = 1; // Select Relay 1
+                    loadHistoryData(1, null, 'last_hour');
+                }
+            }, 500); // Delay to ensure UI generation is complete
         }
 
-        // --- PAGE GENERATION (unchanged, but required for completeness) ---
+        // --- PAGE GENERATION ---
 
         function generateRelayUI() {
             const relayContainer = document.getElementById("relayContainer");
@@ -277,7 +304,7 @@
             }
         }
 
-        // --- FIREBASE LISTENERS & DATA FUNCTIONS (Simplified for modern SDK, using compat for continuity) ---
+        // --- FIREBASE LISTENERS & DATA FUNCTIONS (CONTROL/LIVE) ---
 
         function startFirebaseListeners() {
             // 1. Listener for Control States
@@ -302,18 +329,15 @@
 
             const relayRef = DB.ref("/relay" + id);
             relayRef.get().then(snap => {
-                const currentState = snap.val();
-                // If snap.val() is null, assume OFF (false) and turn ON (true)
-                const newState = (currentState === null || currentState === false) ? true : false;
+                const newState = !snap.val();
                 return relayRef.set(newState);
             })
             .finally(() => {
-                // The on('value') listener handles the button text update
                 button.disabled = false;
             })
             .catch(e => {
                 console.error("Toggle failed:", e);
-                showCustomAlert("Failed to toggle relay. Check console.", 'red');
+                showCustomAlert("Failed to toggle relay.", 'red');
             });
         }
         
@@ -330,18 +354,17 @@
                 });
         }
 
-        // --- UI UPDATERS (mostly unchanged) ---
+        // --- UI UPDATERS (CONTROL/LIVE) ---
 
         function updateRelayControlUI(id, state) {
             const chip = document.getElementById(`status-chip-${id}`);
             const button = document.getElementById(`btn-${id}`);
             
             if (chip) {
-                const isOn = !!state; // Ensure state is treated as boolean
-                chip.textContent = isOn ? "ON" : "OFF";
-                chip.className = isOn ? "status-on text-white font-bold py-1 px-3 rounded-full mb-3 text-sm" : "status-off text-white font-bold py-1 px-3 rounded-full mb-3 text-sm";
-                button.textContent = isOn ? "Turn OFF" : "Turn ON";
-                button.className = isOn ? "w-full bg-primary-red text-white p-3 rounded-lg font-medium hover:bg-red-600 transition" : "w-full bg-primary-blue text-white p-3 rounded-lg font-medium hover:bg-blue-600 transition";
+                chip.textContent = state ? "ON" : "OFF";
+                chip.className = state ? "status-on text-white font-bold py-1 px-3 rounded-full mb-3 text-sm" : "status-off text-white font-bold py-1 px-3 rounded-full mb-3 text-sm";
+                button.textContent = state ? "Turn OFF" : "Turn ON";
+                button.className = state ? "w-full bg-primary-red text-white p-3 rounded-lg font-medium hover:bg-red-600 transition" : "w-full bg-primary-blue text-white p-3 rounded-lg font-medium hover:bg-blue-600 transition";
             }
         }
 
@@ -351,7 +374,7 @@
 
             for (let i = 1; i <= NUM_RELAYS; i++) {
                 const data = liveData[`R${i}`];
-                if (data && data.state === true) { // Only count power if the relay state is ON
+                if (data) {
                     const V = data.V || 0;
                     const I = data.I || 0;
                     const P = data.P || 0;
@@ -366,21 +389,12 @@
                     }
 
                     totalPower += P;
-                } else if (data && data.state === false) {
-                    // Show 0.00 if the relay is off, based on the ESP code logic
-                    document.getElementById(`V-${i}`).textContent = (0.00).toFixed(2);
-                    document.getElementById(`I-${i}`).textContent = (0.00).toFixed(2);
-                    document.getElementById(`P-${i}`).textContent = (0.00).toFixed(2);
-                    if (data.timestamp) {
-                        const date = new Date(data.timestamp * 1000);
-                        document.getElementById(`time-${i}`).textContent = date.toLocaleTimeString();
-                    }
                 }
             }
             document.getElementById("totalPowerValue").textContent = totalPower.toFixed(2);
         }
 
-        // --- TAB NAVIGATION (Minor adjustment for default tab) ---
+        // --- TAB NAVIGATION ---
 
         function setupNavigation() {
             const tabButtons = document.querySelectorAll(".tab-button");
@@ -389,7 +403,6 @@
             tabButtons.forEach(button => {
                 button.addEventListener("click", () => {
                     const targetPage = button.getAttribute("data-tab");
-                    activeTab = targetPage;
                     
                     // Update button styles
                     tabButtons.forEach(btn => btn.classList.remove("active"));
@@ -400,196 +413,385 @@
                     document.querySelector(`[data-page="${targetPage}"]`).classList.remove("hidden");
                 });
             });
-            // Initial load of the Live Readings Panel
-            document.querySelector('.tab-button[data-tab="live"]').click();
+            // Initial load of Control Panel
+            document.querySelector('.tab-button[data-tab="control"]').click();
         }
         
-        // --- HISTORY CHARTING (MODIFIED FOR AGGREGATION) ---
+        // --- HISTORY CHARTING UTILITIES (Shared by Individual and Total) ---
+
+        function getStartTimestamp(mode, startDate) {
+            const now = luxon.DateTime.local();
+            let startTime = now;
+            
+            switch (mode) {
+                case 'last_hour':
+                    startTime = now.minus({ hours: 1 });
+                    break;
+                case 'last_month':
+                    startTime = now.minus({ days: 30 });
+                    break;
+                case 'hourly_average':
+                    // Fetch last 30 days for robust hourly average calculation
+                    startTime = now.minus({ days: 30 }).startOf('day');
+                    break;
+                case 'date_range':
+                default:
+                    startTime = luxon.DateTime.fromISO(startDate).startOf('day');
+                    break;
+            }
+            return startTime.toSeconds();
+        }
+
+        // --- NEW AGGREGATION LOGIC ---
+
+        /**
+         * Aggregates 16 individual relay data snapshots into a single stream, summing the power (P)
+         * at common timestamps.
+         */
+        function aggregateAllRelayData(snapshots) {
+            const combinedData = {}; // Key: timestamp (seconds)
+            
+            snapshots.forEach(snapshot => {
+                const relayData = snapshot.val();
+                if (relayData) {
+                    Object.keys(relayData).forEach(key => {
+                        const record = relayData[key];
+                        const timestamp = record.timestamp;
+                        const P = parseFloat(record.P);
+
+                        if (combinedData[timestamp]) {
+                            // Sum the power from different relays at the exact same timestamp
+                            combinedData[timestamp].P += P;
+                        } else {
+                            // Start a new record for this timestamp
+                            combinedData[timestamp] = {
+                                P: P,
+                                timestamp: timestamp,
+                            };
+                        }
+                    });
+                }
+            });
+            // Sort by timestamp and return as an array of records
+            return Object.values(combinedData).sort((a, b) => a.timestamp - b.timestamp);
+        }
+
+
+        // --- INDIVIDUAL RELAY HISTORY LOGIC ---
 
         function setupHistorySelector() {
-            const relaySelector = document.getElementById("relaySelector");
-            const timeRangeSelector = document.getElementById("timeRangeSelector");
-            
-            // 1. Populate Relay Selector
-            relaySelector.innerHTML = '<option value="" disabled selected>-- Select a Relay --</option>';
+            const selector = document.getElementById("relaySelector");
             for (let i = 1; i <= NUM_RELAYS; i++) {
                 const option = document.createElement("option");
                 option.value = i;
                 option.textContent = `Relay ${i}`;
-                relaySelector.appendChild(option);
+                selector.appendChild(option);
             }
+            selector.insertAdjacentHTML('afterbegin', '<option value="" disabled selected>-- Select a Relay --</option>');
             
-            // 2. Populate Time Range Selector
-            timeRangeSelector.innerHTML = '<option value="" disabled selected>-- Select Time Range --</option>';
-            for (const key in TIME_RANGES) {
-                const option = document.createElement("option");
-                option.value = key;
-                option.textContent = TIME_RANGES[key].label;
-                timeRangeSelector.appendChild(option);
-            }
-            
-            // 3. Attach Event Listener
+            // Attach event listeners for individual relay history
             document.getElementById("fetchHistoryBtn").addEventListener("click", () => {
-                const relayId = relaySelector.value;
-                const timeRangeKey = timeRangeSelector.value;
+                const relayId = selector.value;
+                const startDate = document.getElementById('startDate').value;
 
-                if (!relayId || !timeRangeKey) {
-                    showCustomAlert("Please select both a Relay and a Time Range.", 'red');
-                    return;
-                }
-                loadHistoryData(parseInt(relayId), timeRangeKey);
-            });
-        }
-
-        /**
-         * Generates a key for aggregation based on time unit (UTC to ensure consistency).
-         * @param {number} timestamp - Unix timestamp in seconds.
-         * @param {string} unit - 'hour', 'day', 'month', or 'raw'.
-         * @returns {string} Aggregation key.
-         */
-        function getAggregationKey(timestamp, unit) {
-            const date = new Date(timestamp * 1000);
-            const year = date.getUTCFullYear();
-            const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-            const day = String(date.getUTCDate()).padStart(2, '0');
-            const hour = String(date.getUTCHours()).padStart(2, '0');
-
-            if (unit === 'month') {
-                return `${year}-${month}`; // 12 points for year view
-            }
-            if (unit === 'day') {
-                return `${year}-${month}-${day}`; // 7 or 30 points for week/month view
-            }
-            if (unit === 'hour') {
-                return `${year}-${month}-${day} ${hour}:00`; // 24 points for day view
-            }
-            return timestamp.toString(); // Raw data
-        }
-
-        /**
-         * Aggregates raw data records into time-based averages.
-         * @param {Array<Object>} records - Array of raw data objects from Firebase.
-         * @param {string} aggregateUnit - 'hour', 'day', 'month', or 'raw'.
-         * @returns {{labels: Array<string>, powerData: Array<number>}} Aggregated data.
-         */
-        function aggregateData(records, aggregateUnit) {
-            if (aggregateUnit === 'raw') {
-                const rawLabels = records.map(record => new Date(record.timestamp * 1000).toLocaleTimeString() + ' ' + new Date(record.timestamp * 1000).toLocaleDateString());
-                const rawPower = records.map(record => parseFloat(record.P.toFixed(2)));
-                return { labels: rawLabels, powerData: rawPower };
-            }
-
-            const dataMap = new Map();
-
-            records.forEach(record => {
-                const key = getAggregationKey(record.timestamp, aggregateUnit);
-                const power = record.P || 0;
-
-                if (!dataMap.has(key)) {
-                    dataMap.set(key, { sum: 0, count: 0 });
-                }
-
-                const entry = dataMap.get(key);
-                entry.sum += power;
-                entry.count += 1;
-            });
-
-            // Convert map to sorted arrays
-            const sortedKeys = Array.from(dataMap.keys()).sort();
-            const labels = [];
-            const powerData = [];
-
-            sortedKeys.forEach(key => {
-                const entry = dataMap.get(key);
-                const avgPower = entry.count > 0 ? entry.sum / entry.count : 0;
+                if (!relayId) return showCustomAlert("Please select a Relay first.", 'red');
+                if (!startDate) return showCustomAlert("Please select a Start Date.", 'red');
                 
-                // Format label based on aggregation unit
-                if (aggregateUnit === 'month') {
-                    // Key is YYYY-MM
-                    labels.push(new Date(key + "-01").toLocaleDateString('en-US', { year: 'numeric', month: 'short' }));
-                } else if (aggregateUnit === 'day') {
-                    // Key is YYYY-MM-DD
-                    labels.push(new Date(key).toLocaleDateString());
-                } else if (aggregateUnit === 'hour') {
-                    // Key is YYYY-MM-DD HH:00
-                    labels.push(new Date(key).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) + ' ' + new Date(key).toLocaleDateString());
-                }
-                
-                powerData.push(parseFloat(avgPower.toFixed(2)));
+                loadHistoryData(parseInt(relayId), startDate, 'date_range');
             });
-
-            return { labels, powerData };
-        }
-
-        function loadHistoryData(relayId, timeRangeKey) {
-            document.getElementById("graphMessage").textContent = `Fetching historical data for Relay ${relayId}...`;
             
-            const rangeConfig = TIME_RANGES[timeRangeKey];
-            const startTime = Math.floor(Date.now() / 1000) - rangeConfig.seconds;
+            document.getElementById("lastHourBtn").addEventListener("click", () => {
+                const relayId = selector.value;
+                if (!relayId) return showCustomAlert("Please select a Relay first.", 'red');
+                loadHistoryData(parseInt(relayId), null, 'last_hour');
+            });
 
-            // Query Firebase for all data in the range
-            const historyRef = DB.ref(`/history/R${relayId}`)
-                .orderByChild('timestamp')
-                .startAt(startTime);
+            document.getElementById("last30DaysBtn").addEventListener("click", () => {
+                const relayId = selector.value;
+                if (!relayId) return showCustomAlert("Please select a Relay first.", 'red');
+                loadHistoryData(parseInt(relayId), null, 'last_month');
+            });
 
-            historyRef.once('value')
-                .then(snapshot => {
-                    const rawData = snapshot.val();
-                    const records = [];
-                    
-                    if (rawData) {
-                        // Convert snapshot object to array, filtering out any records that somehow lack a timestamp
-                        Object.keys(rawData).forEach(key => {
-                            if (rawData[key].timestamp) {
-                                records.push(rawData[key]);
-                            }
-                        });
+            document.getElementById("dailyAvgBtn").addEventListener("click", () => {
+                const relayId = selector.value;
+                if (!relayId) return showCustomAlert("Please select a Relay first.", 'red');
+                loadHistoryData(parseInt(relayId), null, 'hourly_average'); 
+            });
+        }
+        
+        function loadHistoryData(relayId, startDate, mode, isTotalSystem = false) {
+            const fetchBtn = document.getElementById(isTotalSystem ? 'totalLastHourBtn' : 'fetchHistoryBtn');
+            const graphMessageElement = document.getElementById(isTotalSystem ? 'totalGraphMessage' : 'graphMessage');
+            const targetCanvas = isTotalSystem ? 'totalPowerChart' : 'powerChart';
+            
+            // Disable buttons and show loading message
+            document.querySelectorAll(isTotalSystem ? '#total-analysis button' : '#history button').forEach(btn => btn.disabled = true);
+            graphMessageElement.textContent = `Loading history for ${isTotalSystem ? 'TOTAL SYSTEM' : 'Relay ' + relayId} (${mode.replace('_', ' ')})...`;
+
+            const startTimestamp = getStartTimestamp(mode, startDate);
+            
+            let queryPromises = [];
+
+            if (isTotalSystem) {
+                // Fetch all 16 relay histories
+                for (let i = 1; i <= NUM_RELAYS; i++) {
+                    const historyRef = DB.ref(`/history/R${i}`)
+                        .orderByChild("timestamp")
+                        .startAt(startTimestamp);
+                    queryPromises.push(historyRef.once('value'));
+                }
+            } else {
+                // Fetch single relay history
+                const historyRef = DB.ref(`/history/R${relayId}`)
+                    .orderByChild("timestamp")
+                    .startAt(startTimestamp);
+                queryPromises.push(historyRef.once('value'));
+            }
+
+            Promise.all(queryPromises)
+                .then(snapshots => {
+                    let rawData;
+                    if (isTotalSystem) {
+                        rawData = aggregateAllRelayData(snapshots);
+                    } else {
+                        rawData = snapshots[0].val();
                     }
                     
-                    if (records.length === 0) {
-                        document.getElementById("graphMessage").textContent = `No historical data found for Relay ${relayId} in the ${rangeConfig.label} time range.`;
-                        destroyChart();
+                    if (!rawData || (Array.isArray(rawData) && rawData.length === 0)) {
+                        graphMessageElement.textContent = `No historical data found for ${isTotalSystem ? 'TOTAL SYSTEM' : 'Relay ' + relayId} in the selected period.`;
+                        destroyChart(targetCanvas);
                         return;
                     }
 
-                    // AGGREGATION STEP
-                    const { labels, powerData } = aggregateData(records, rangeConfig.aggregate);
-                    
-                    document.getElementById("graphMessage").textContent = `Showing aggregated power usage (${rangeConfig.aggregate} average) for Relay ${relayId} over the ${rangeConfig.label}. Total data points: ${powerData.length}.`;
-                    renderChart(relayId, labels, powerData, rangeConfig.label);
+                    // Convert raw data (which is an object keyed by timestamp for total) to an array for processing
+                    const dataArray = Array.isArray(rawData) ? rawData : Object.values(rawData);
+
+                    let chartType;
+                    let chartData = [];
+                    let labels = [];
+                    let unit = 'hour';
+                    let totalRecords = 0;
+
+                    if (mode === 'hourly_average') {
+                        const { labels: hourlyLabels, averages } = calculateHourlyAverage(dataArray);
+                        labels = hourlyLabels;
+                        chartData = averages;
+                        chartType = 'hourly_line'; 
+                        totalRecords = averages.length;
+                    } 
+                    else if (mode === 'last_month') {
+                        const { labels: dailyLabels, totals } = calculateDailyTotals(dataArray);
+                        labels = dailyLabels;
+                        chartData = totals;
+                        chartType = 'daily_total'; 
+                        totalRecords = totals.length;
+                    }
+                    else if (mode === 'last_hour') { 
+                        const { chartData: minutelyData, totalRecords: minutelyRecords } = calculateMinutelyAverage(dataArray);
+                        chartData = minutelyData;
+                        chartType = 'minutely_line';
+                        totalRecords = minutelyRecords;
+                        unit = 'minute';
+                    }
+                    else {
+                        // Time Series data (Date Range)
+                        dataArray.forEach(record => {
+                            chartData.push({
+                                x: record.timestamp * 1000, 
+                                y: parseFloat(record.P.toFixed(2))
+                            });
+                            totalRecords++;
+                        });
+                        chartType = 'time_series';
+                        const rangeSeconds = (luxon.DateTime.local().toSeconds() - startTimestamp);
+                        if (rangeSeconds <= 3600 * 24) { unit = 'minute'; } 
+                        else if (rangeSeconds <= 3600 * 24 * 7) { unit = 'hour'; } 
+                        else { unit = 'day'; }
+                    }
+
+                    if (totalRecords === 0) {
+                        graphMessageElement.textContent = `No power usage recorded for ${isTotalSystem ? 'TOTAL SYSTEM' : 'Relay ' + relayId} in the selected period.`;
+                        destroyChart(targetCanvas);
+                        return;
+                    }
+
+                    graphMessageElement.textContent = `Showing ${totalRecords} data points for ${isTotalSystem ? 'TOTAL SYSTEM' : 'Relay ' + relayId} in mode: ${mode.replace('_', ' ')}.`;
+                    renderChart(relayId, chartData, labels, chartType, unit, mode, targetCanvas, isTotalSystem);
                 })
                 .catch(error => {
                     console.error("Error fetching history:", error);
-                    document.getElementById("graphMessage").textContent = "Error fetching history data. Ensure Firebase rules include an index for 'timestamp'. Check console for details.";
-                    destroyChart();
+                    graphMessageElement.textContent = "Error fetching history data. Check console for details.";
+                    destroyChart(targetCanvas);
+                })
+                .finally(() => {
+                    document.querySelectorAll(isTotalSystem ? '#total-analysis button' : '#history button').forEach(btn => btn.disabled = false);
+                    if (!isTotalSystem) {
+                        fetchBtn.textContent = 'Load Date Range';
+                    }
                 });
         }
 
-        function destroyChart() {
-            if (powerChartInstance) {
+        // --- ANALYSIS FUNCTIONS (Shared) ---
+
+        function calculateMinutelyAverage(dataArray) {
+            const minuteTotals = {}; 
+            const minuteCounts = {}; 
+            
+            if (!dataArray) return { chartData: [], totalRecords: 0 };
+
+            dataArray.forEach(record => {
+                const P = parseFloat(record.P);
+                if (P > 0) {
+                    const dateTime = luxon.DateTime.fromSeconds(record.timestamp);
+                    const minuteKey = dateTime.startOf('minute').toMillis(); 
+
+                    minuteTotals[minuteKey] = (minuteTotals[minuteKey] || 0) + P;
+                    minuteCounts[minuteKey] = (minuteCounts[minuteKey] || 0) + 1;
+                }
+            });
+
+            const chartData = [];
+            let totalRecords = 0;
+            
+            Object.keys(minuteTotals).forEach(minuteKey => {
+                const total = minuteTotals[minuteKey];
+                const count = minuteCounts[minuteKey];
+                const avg = count > 0 ? total / count : 0;
+                
+                chartData.push({
+                    x: parseInt(minuteKey), 
+                    y: avg.toFixed(2)
+                });
+                totalRecords++;
+            });
+
+            chartData.sort((a, b) => a.x - b.x);
+
+            return { chartData, totalRecords };
+        }
+
+        function calculateHourlyAverage(dataArray) {
+            const hourlyTotals = new Array(24).fill(0);
+            const hourlyCounts = new Array(24).fill(0);
+            
+            if (!dataArray) return { labels: [], averages: [] };
+
+            dataArray.forEach(record => {
+                const P = parseFloat(record.P);
+                if (P > 0) {
+                    const dateTime = luxon.DateTime.fromSeconds(record.timestamp);
+                    const hour = dateTime.hour; 
+
+                    hourlyTotals[hour] += P;
+                    hourlyCounts[hour] += 1;
+                }
+            });
+
+            const labels = [];
+            const averages = [];
+
+            for (let hour = 0; hour < 24; hour++) {
+                const count = hourlyCounts[hour];
+                const total = hourlyTotals[hour];
+                
+                let avg = 0;
+                if (count > 0) {
+                    avg = total / count;
+                }
+                
+                labels.push(`${hour.toString().padStart(2, '0')}:00`);
+                averages.push(avg.toFixed(2));
+            }
+
+            return { labels, averages };
+        }
+        
+        function calculateDailyTotals(dataArray) {
+            const dailyTotals = {}; 
+            
+            if (!dataArray) return { labels: [], totals: [] };
+
+            const logIntervalHours = 2 / 3600; 
+
+            dataArray.forEach(record => {
+                const P = parseFloat(record.P);
+                if (P > 0) {
+                    const dateTime = luxon.DateTime.fromSeconds(record.timestamp);
+                    const dateKey = dateTime.toISODate(); 
+                    
+                    dailyTotals[dateKey] = (dailyTotals[dateKey] || 0) + P;
+                }
+            });
+
+            const sortedKeys = Object.keys(dailyTotals).sort();
+            const labels = [];
+            const totals = [];
+
+            sortedKeys.forEach(dateKey => {
+                labels.push(dateKey); 
+                
+                const powerInWatts = dailyTotals[dateKey];
+                
+                const energyInKWh = (powerInWatts * logIntervalHours) / 1000;
+                
+                totals.push(energyInKWh.toFixed(3)); 
+            });
+
+            return { labels, totals };
+        }
+
+        // --- CHART RENDERING ---
+        
+        function destroyChart(canvasId) {
+            if (canvasId === 'powerChart' && powerChartInstance) {
                 powerChartInstance.destroy();
                 powerChartInstance = null;
+            } else if (canvasId === 'totalPowerChart' && totalPowerChartInstance) {
+                totalPowerChartInstance.destroy();
+                totalPowerChartInstance = null;
             }
         }
         
-        function renderChart(relayId, labels, powerData, timeRangeLabel) {
-            destroyChart();
+        function renderChart(relayId, chartData, labels, chartType, timeUnit, mode, canvasId, isTotalSystem) {
+            destroyChart(canvasId);
 
-            const ctx = document.getElementById('powerChart').getContext('2d');
-            powerChartInstance = new Chart(ctx, {
-                type: 'line',
+            const isTimeSeries = chartType === 'time_series'; 
+            const isDailyTotal = chartType === 'daily_total'; 
+            const isHourlyLine = chartType === 'hourly_line'; 
+            const isMinutelyLine = chartType === 'minutely_line'; 
+            
+            const isLine = isHourlyLine || isMinutelyLine;
+
+            const chartDataConfig = isTimeSeries || isLine ? chartData : chartData.map(val => parseFloat(val));
+            
+            const chartLabelPrefix = isTotalSystem ? 'Total System' : `Relay ${relayId}`;
+
+            const chartLabel = isDailyTotal ? `Total Energy (kWh) - ${chartLabelPrefix}` : 
+                               isHourlyLine ? `Hourly Average Power (W) - ${chartLabelPrefix}` : 
+                               isMinutelyLine ? `Minutely Average Power (W) - ${chartLabelPrefix}` :
+                                              `Power (Watts) - ${chartLabelPrefix}`;
+            
+            const tooltipUnit = isDailyTotal ? ' kWh' : ' W';
+            const mainColor = isTotalSystem ? 'rgba(139, 92, 246, 1)' : 'rgb(59, 130, 246)'; // Purple for Total
+
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            const newChartInstance = new Chart(ctx, {
+                type: isLine ? 'line' : 'bar', 
                 data: {
-                    labels: labels,
+                    labels: isTimeSeries || isMinutelyLine ? null : labels, 
                     datasets: [{
-                        label: `Average Power (Watts) - Relay ${relayId}`,
-                        data: powerData,
-                        borderColor: 'rgb(59, 130, 246)', 
-                        borderWidth: 2,
-                        fill: true,
-                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                        tension: 0.3,
-                        pointRadius: 4, // Make points visible for aggregated data
-                        pointHoverRadius: 6
+                        label: chartLabel,
+                        data: chartDataConfig,
+                        borderColor: isMinutelyLine ? 'rgba(239, 68, 68, 1)' : 
+                                     isHourlyLine ? 'rgba(16, 185, 129, 1)' : mainColor,
+                        borderWidth: isDailyTotal ? 1 : isLine ? 3 : 2,
+                        fill: isLine ? true : false,
+                        backgroundColor: isMinutelyLine ? 'rgba(239, 68, 68, 0.2)' : 
+                                         isDailyTotal ? `${mainColor.replace('1)', '0.7)')}` : 
+                                         isHourlyLine ? 'rgba(16, 185, 129, 0.2)' : `${mainColor.replace('1)', '0.6)')}`, 
+                        tension: isLine ? 0.4 : 0, 
+                        pointRadius: isLine ? 4 : 0,
+                        type: isMinutelyLine || isHourlyLine ? 'line' : 'bar', 
                     }]
                 },
                 options: {
@@ -597,16 +799,22 @@
                     maintainAspectRatio: false,
                     scales: {
                         x: {
-                            title: { display: true, text: `Time (${timeRangeLabel})` },
-                            // For aggregated data, auto-skip can be helpful if the labels are too long
-                            ticks: {
-                                maxRotation: 45,
-                                minRotation: 45,
-                                autoSkipPadding: 20,
-                            }
+                            type: isTimeSeries || isMinutelyLine ? 'time' : 'category', 
+                            adapters: { date: luxon }, 
+                            time: isTimeSeries || isMinutelyLine ? {
+                                unit: timeUnit, 
+                                tooltipFormat: 'MMM dd, yyyy h:mm:ss a',
+                                displayFormats: {
+                                    minute: 'h:mm a',
+                                    hour: 'h:mm a MMM dd',
+                                    day: 'MMM dd'
+                                }
+                            } : null,
+                            title: { display: true, text: isTimeSeries || isMinutelyLine ? 'Time and Date' : isDailyTotal ? 'Date (YYYY-MM-DD)' : 'Hour of Day (24hr)' },
+                            ticks: { maxRotation: 45, minRotation: 45, autoSkipPadding: 20 }
                         },
                         y: {
-                            title: { display: true, text: 'Average Power (W)' },
+                            title: { display: true, text: isDailyTotal ? 'Energy (kWh)' : 'Power (W)' },
                             beginAtZero: true
                         }
                     },
@@ -615,21 +823,114 @@
                         tooltip: {
                             callbacks: {
                                 title: function(context) {
-                                    // Show the full aggregated period as the title
-                                    return context[0].label; 
+                                    if (isTimeSeries || isMinutelyLine) {
+                                        return luxon.DateTime.fromMillis(context[0].parsed.x).toFormat('MMM dd, yyyy HH:mm:ss');
+                                    }
+                                    return context[0].label;
                                 },
                                 label: function(context) {
-                                    return context.dataset.label.replace('Average ', '') + ': ' + context.formattedValue + ' W (Avg)';
+                                    return context.dataset.label + ': ' + context.formattedValue + tooltipUnit;
                                 }
                             }
                         }
                     }
                 }
             });
+
+            if (canvasId === 'powerChart') {
+                powerChartInstance = newChartInstance;
+            } else if (canvasId === 'totalPowerChart') {
+                totalPowerChartInstance = newChartInstance;
+            }
+        }
+
+        // --- NEW: TOTAL SYSTEM ANALYSIS LISTENERS ---
+        
+        function setupTotalAnalysisListeners() {
+            document.getElementById("totalLastHourBtn").addEventListener("click", () => {
+                loadTotalHistoryData('last_hour');
+            });
+
+            document.getElementById("totalLast30DaysBtn").addEventListener("click", () => {
+                loadTotalHistoryData('last_month');
+            });
+
+            document.getElementById("totalDailyAvgBtn").addEventListener("click", () => {
+                loadTotalHistoryData('hourly_average');
+            });
+        }
+        
+        async function loadTotalHistoryData(mode) {
+            const targetCanvas = 'totalPowerChart';
+            const graphMessageElement = document.getElementById('totalGraphMessage');
+            
+            document.querySelectorAll('#total-analysis button').forEach(btn => btn.disabled = true);
+            graphMessageElement.textContent = `Loading history for TOTAL SYSTEM (${mode.replace('_', ' ')})... This may take a moment.`;
+
+            const startTimestamp = getStartTimestamp(mode, null);
+
+            let queryPromises = [];
+            // 1. Create a promise to fetch data for all 16 relays
+            for (let i = 1; i <= NUM_RELAYS; i++) {
+                const historyRef = DB.ref(`/history/R${i}`)
+                    .orderByChild("timestamp")
+                    .startAt(startTimestamp);
+                queryPromises.push(historyRef.once('value'));
+            }
+
+            try {
+                const snapshots = await Promise.all(queryPromises);
+                
+                // 2. Aggregate all 16 datasets into one unified stream
+                const rawData = aggregateAllRelayData(snapshots);
+                const dataArray = Object.values(rawData);
+                
+                if (dataArray.length === 0) {
+                    graphMessageElement.textContent = `No historical data found for TOTAL SYSTEM in the selected period.`;
+                    destroyChart(targetCanvas);
+                    return;
+                }
+
+                let chartType;
+                let chartData = [];
+                let labels = [];
+                let unit = 'hour';
+                let totalRecords = 0;
+
+                if (mode === 'hourly_average') {
+                    const { labels: hourlyLabels, averages } = calculateHourlyAverage(dataArray);
+                    labels = hourlyLabels;
+                    chartData = averages;
+                    chartType = 'hourly_line'; 
+                    totalRecords = averages.length;
+                } 
+                else if (mode === 'last_month') {
+                    const { labels: dailyLabels, totals } = calculateDailyTotals(dataArray);
+                    labels = dailyLabels;
+                    chartData = totals;
+                    chartType = 'daily_total';
+                    totalRecords = totals.length;
+                }
+                else if (mode === 'last_hour') { 
+                    const { chartData: minutelyData, totalRecords: minutelyRecords } = calculateMinutelyAverage(dataArray);
+                    chartData = minutelyData;
+                    chartType = 'minutely_line'; 
+                    totalRecords = minutelyRecords;
+                    unit = 'minute';
+                }
+                
+                graphMessageElement.textContent = `Showing ${totalRecords} data points for TOTAL SYSTEM in mode: ${mode.replace('_', ' ')}.`;
+                renderChart(0, chartData, labels, chartType, unit, mode, targetCanvas, true); // RelayId 0 to signify total
+
+            } catch (error) {
+                console.error("Error fetching total system history:", error);
+                graphMessageElement.textContent = "Error fetching total history data. Check console for details.";
+                destroyChart(targetCanvas);
+            } finally {
+                document.querySelectorAll('#total-analysis button').forEach(btn => btn.disabled = false);
+            }
         }
 
     </script>
-
-
 </body>
 </html>
